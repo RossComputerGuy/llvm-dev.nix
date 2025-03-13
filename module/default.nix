@@ -1,24 +1,58 @@
 { config, lib, withSystem, ... }@top:
 let
-  inherit (lib) mkEnableOption mkOption mkDefault genAttrs types;
+  inherit (lib) mkEnableOption mkOption mkDefault mkMerge mkIf genAttrs types;
 
   cfg = config.llvm;
 
-  projectOpts = types.submodule {
-    options = {
-      bolt.enable = mkEnableOption "bolt post-link optimizer";
-      clang.enable = mkEnableOption "Clang C compiler";
-      clang-tools-extra.enable = mkEnableOption "extra Clang tools";
-      compiler-rt.enable = mkEnableOption "compiler-rt";
-      libc.enable = mkEnableOption "libc";
-      libclc.enable = mkEnableOption "libclc";
-      lld.enable = mkEnableOption "LLD linker";
-      lldb.enable = mkEnableOption "lldb debugger";
-      mlir.enable = mkEnableOption "mlir";
-      openmp.enable = mkEnableOption "openmp";
-      polly.enable = mkEnableOption "polly";
-    };
-  };
+  projectOpts = types.submodule ({ config, ... }: {
+    options =
+    let
+      mkCMakeFlags = name: mkOption {
+        type = types.attrsOf types.str;
+        default = {};
+        description = ''
+          CMake flags for ${name}
+        '';
+      };
+
+      mkSubproject = name: {
+        enable = mkEnableOption name;
+        cmakeFlags = mkCMakeFlags name;
+      };
+
+      projects = {
+        bolt = {};
+        clang = {};
+        clang-tools-extra = {};
+        compiler-rt = {};
+        libc = {
+          mode = mkOption {
+            type = types.enum [ "overlay" "full" ];
+            default = "full";
+            description = ''
+              Whether to perform an overlay build or full build.
+            '';
+          };
+        };
+        libclc = {};
+        lld = {};
+        lldb = {};
+        libunwind = {};
+        mlir = {};
+        openmp = {};
+        polly = {};
+      };
+
+    in lib.mapAttrs (name: extra: mkSubproject name // extra) projects;
+
+    config = mkMerge [
+      (mkIf config.libc.enable {
+        libc.cmakeFlags = {
+          LLVM_LIBC_FULL_BUILD = lib.boolToString (config.libc.mode == "full");
+        };
+      })
+    ];
+  });
 in
 {
   options.llvm = {
@@ -45,10 +79,19 @@ in
               The specific LLVM projects to enable in the runtime.
             '';
           };
+
+          cmakeFlags = mkOption {
+            type = types.attrsOf types.str;
+            default = {};
+            description = ''
+              CMake flags for the specific platform.
+            '';
+          };
         };
 
         config = {
           name = mkDefault name;
+          cmakeFlags = lib.fold lib.mergeAttrs {} (lib.attrValues (lib.mapAttrs (_: cfg: cfg.cmakeFlags) config.projects));
         };
       }));
     };
@@ -86,6 +129,7 @@ in
         projects = mkDefault {
           compiler-rt.enable = true;
           libc.enable = true;
+          libunwind.enable = true;
         };
       })));
     };

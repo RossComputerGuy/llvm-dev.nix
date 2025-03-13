@@ -38,13 +38,28 @@ stdenv.mkDerivation (finalAttrs: {
       "-S"
       "../llvm"
       (lib.cmakeFeature "LLVM_ENABLE_PROJECTS" (cmakeProjectValue projects))
-      (lib.cmakeFeature "LLVM_RUNTIME_TARGETS" (lib.concatStringsSep ";" (lib.attrValues (lib.mapAttrs (_: cfg: cfg.name) runtimes))))
+      (lib.cmakeFeature "LLVM_RUNTIME_TARGETS" (
+        lib.concatStringsSep ";" (lib.attrValues (lib.mapAttrs (_: cfg: cfg.name) runtimes))
+      ))
     ]
     ++ lib.flatten (
       lib.attrValues (
-        lib.mapAttrs (_: cfg: [
-          (lib.cmakeFeature "RUNTIMES_${cfg.name}_LLVM_ENABLE_RUNTIMES" (cmakeProjectValue cfg.projects))
-        ]) runtimes
+        lib.mapAttrs (
+          _: cfg: lib.attrValues (lib.mapAttrs (key: value: "-D${key}=${value}") (cfg.cmakeFlags or { }))
+        ) projects
+      )
+    )
+    ++ lib.flatten (
+      lib.attrValues (
+        lib.mapAttrs (
+          _: cfg:
+          [
+            (lib.cmakeFeature "RUNTIMES_${cfg.name}_LLVM_ENABLE_RUNTIMES" (cmakeProjectValue cfg.projects))
+          ]
+          ++ (lib.attrValues (
+            lib.mapAttrs (key: value: "-DRUNTIMES_${cfg.name}_${key}=${value}") (cfg.cmakeFlags or { })
+          ))
+        ) runtimes
       )
     );
 
