@@ -38,6 +38,7 @@ stdenv.mkDerivation (finalAttrs: {
       "-S"
       "../llvm"
       (lib.cmakeFeature "LLVM_ENABLE_PROJECTS" (cmakeProjectValue projects))
+      (lib.cmakeFeature "LLVM_RUNTIME_TARGETS" (lib.concatStringsSep ";" (lib.attrValues (lib.mapAttrs (_: cfg: cfg.name) runtimes))))
     ]
     ++ lib.flatten (
       lib.attrValues (
